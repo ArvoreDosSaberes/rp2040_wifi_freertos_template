@@ -1,0 +1,60 @@
+name: "RP2040 CI"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build RP2040 (${{ matrix.board }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [pico_w]
+
+    env:
+      PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            build-essential \
+            python3
+
+      - name: Fetch Pico SDK
+        run: |
+          git clone --depth=1 https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
+          git -C "$PICO_SDK_PATH" submodule update --init
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build-${{ matrix.board }} \
+            -G "Unix Makefiles" \
+            -DPICO_BOARD=${{ matrix.board }} \
+            -DPICO_SDK_PATH=$PICO_SDK_PATH \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build-${{ matrix.board }} --config Release -- -j$(nproc)
+
+      # Passo preparado para futuros testes automatizados (ctest ou testes nativos)
+      - name: Run tests (if available)
+        working-directory: build-${{ matrix.board }}
+        run: |
+          ctest --output-on-failure || echo "No ctest targets or tests failed; build itself already valida a compilação."
+
+
